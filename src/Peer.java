@@ -287,13 +287,6 @@ public class Peer {
                     String fileName = this.UDPRequest.getFileName();
                     String ipOriginPortRequest = this.UDPRequest.getOriginIpPort();
 
-                    // // add origin ip as proceeded
-                    // if (!this.isProceeded(fileName, ipOriginPortRequest) &&
-                    // filesProceeded.isEmpty()) {
-                    // this.filesProceeded.add(fileName);
-                    // this.ipPortProceeded.add(ipOriginPortRequest);
-                    // }
-
                     if (folderChanged) {
                         this.resetProceedList();
                         folderChanged = false;
