@@ -19,6 +19,7 @@ public class Peer {
     public static int peerPort2;
 
     public static boolean timeoutFinished = true;
+    public static boolean folderChanged = false;
 
     public static void main(String args[]) throws Exception {
         // menu
@@ -207,6 +208,7 @@ public class Peer {
         private String peerIp;
         private int peerPort;
         private String folderPath;
+        private ArrayList<String> names = new ArrayList<String>();
 
         public PeerWatchdog(String peerIp, int peerPort, String folderPath) {
             this.peerIp = peerIp;
@@ -221,11 +223,21 @@ public class Peer {
                     Thread.sleep(30000);
                     File[] listFiles = new File(folderPath).listFiles();
 
+                    ArrayList<String> cloneNames = new ArrayList<String>();
+                    for (String item : this.names) {
+                        cloneNames.add(item);
+                    }
+
                     // peer file names
-                    ArrayList<String> names = new ArrayList<String>();
+                    this.names = new ArrayList<String>();
                     for (File f : listFiles) {
-                        if (f.isFile())
-                            names.add(f.getName());
+                        if (f.isFile()) {
+                            this.names.add(f.getName());
+                        }
+                    }
+
+                    if (!this.names.toString().contentEquals(cloneNames.toString()) && !cloneNames.isEmpty()) {
+                        folderChanged = true;
                     }
 
                     String files = "";
@@ -234,7 +246,7 @@ public class Peer {
                     }
                     System.out.println("Sou peer " + peerIp + ":" + peerPort + " com arquivos " + files);
                 } catch (Exception e) {
-
+                    System.out.println(e);
                 }
             }
         }
@@ -279,6 +291,11 @@ public class Peer {
                     if (!this.isProceeded(fileName, ipOriginPortRequest) && filesProceeded.isEmpty()) {
                         this.filesProceeded.add(fileName);
                         this.ipPortProceeded.add(ipOriginPortRequest);
+                    }
+
+                    if (folderChanged) {
+                        this.resetProceedList();
+                        folderChanged = false;
                     }
 
                     Mensagem UDPResponse = new Mensagem();
