@@ -3,12 +3,16 @@ package Mensagem;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.io.Serializable;
+import java.time.LocalDateTime;
 
 public class Mensagem implements Serializable {
     private String message = " ";
     private InetAddress address;
     private int port;
     private String fileName = "";
+    private LocalDateTime dateTime = LocalDateTime.now();
+    private InetAddress originAddress;
+    private int originPort;
     private ArrayList<InetAddress> addressList = new ArrayList<>();
     private ArrayList<String> portList = new ArrayList<>();
 
@@ -44,6 +48,14 @@ public class Mensagem implements Serializable {
         this.fileName = f;
     }
 
+    public void setDateTime(LocalDateTime d) {
+        this.dateTime = d;
+    }
+
+    public LocalDateTime getDateTime() {
+        return this.dateTime;
+    }
+
     public void setAddressList(ArrayList<InetAddress> aList, ArrayList<String> pList) {
         this.addressList = aList;
         this.portList = pList;
@@ -64,18 +76,17 @@ public class Mensagem implements Serializable {
         this.portList.add(String.valueOf(p));
     }
 
-    public InetAddress getOriginAddress() {
-        if (this.addressList.isEmpty()) {
-            return this.address;
-        }
-        return this.addressList.get(0);
+    public void setOrigin(InetAddress a, int p) {
+        this.originAddress = a;
+        this.originPort = p;
     }
 
-    public int getOriginIp() {
-        if (this.portList.isEmpty()) {
-            return this.port;
-        }
-        return Integer.parseInt(this.portList.get(0));
+    public InetAddress getOriginAddress() {
+        return this.originAddress;
+    }
+
+    public int getOriginPort() {
+        return this.originPort;
     }
 
     public String getIpPort() {
@@ -85,6 +96,6 @@ public class Mensagem implements Serializable {
 
     public String getOriginIpPort() {
         String ip = getOriginAddress().toString().replace("/", "");
-        return ip + ":" + String.valueOf(getOriginIp());
+        return ip + ":" + String.valueOf(getOriginPort());
     }
 }

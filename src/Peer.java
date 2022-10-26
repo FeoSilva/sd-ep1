@@ -4,6 +4,7 @@ import Mensagem.Mensagem;
 
 import java.io.*;
 import java.net.*;
+import java.time.LocalDateTime;
 import java.lang.Thread;
 
 @SuppressWarnings({ "resource", })
@@ -18,8 +19,7 @@ public class Peer {
     public static InetAddress peerAddress2;
     public static int peerPort2;
 
-    public static boolean timeoutFinished = true;
-    public static boolean folderChanged = false;
+    public static ArrayList<String> timeoutProceedQueue = new ArrayList<>();
 
     public static void main(String args[]) throws Exception {
         // menu
@@ -53,7 +53,7 @@ public class Peer {
                     String folderPath = input.nextLine();
                     File[] listFiles = new File(folderPath).listFiles();
                     while (listFiles == null) {
-                        System.out.print("Endereco invalido, insira novamente: ");
+                        System.out.print("Endereço invalido, insira novamente: ");
                         folderPath = input.nextLine();
                         listFiles = new File(folderPath).listFiles();
                     }
@@ -94,11 +94,14 @@ public class Peer {
                     System.out.print("arquivos da pasta: ");
                     printArray(fileNames);
 
+                    // print files in the folder each 30s
                     PeerWatchdog wd = new PeerWatchdog(peerIp, peerPort, folderPath);
                     wd.start();
 
+                    // start a socket connection in the typed peer port
                     serverSocket = new DatagramSocket(peerPort);
 
+                    // listen messages and forward
                     PeerHandler peer = new PeerHandler(serverSocket, folderPath);
                     peer.start();
 
@@ -120,7 +123,10 @@ public class Peer {
                     Mensagem UDPRequest = new Mensagem();
                     UDPRequest.setMessage("SEARCH");
                     UDPRequest.setFileName(fileName);
-                    UDPRequest.addAddress(peerAddress, peerPort);
+                    UDPRequest.setOrigin(peerAddress, peerPort);
+
+                    // add origin datetime to timeout queue
+                    timeoutProceedQueue.add(UDPRequest.getDateTime().toString());
 
                     int peerIndex = getRandomPeerIndex();
                     InetAddress peerA;
@@ -133,8 +139,11 @@ public class Peer {
                         peerP = peerPort2;
                     }
 
+                    // send UDP message to random known peer
                     sendMessage(UDPRequest, serverSocket, peerA, peerP);
-                    waitResponse(serverSocket, fileName);
+
+                    // start timeout of message
+                    waitResponse(serverSocket, fileName, UDPRequest.getDateTime().toString());
                 } else {
                     System.out.println("Opção invalida!");
                 }
@@ -164,27 +173,40 @@ public class Peer {
         }).start();
     }
 
-    private static void waitResponse(DatagramSocket s, String f) {
-        timeoutFinished = false;
+    private static void waitResponse(DatagramSocket s, String f, String dt) {
         int timeout = 10000; // time in miliseconds
 
         // periodically check response timeout
         new Thread(() -> {
             int t = 0;
+            boolean timeoutFinished = false;
+
             while (!timeoutFinished) {
                 try {
                     Thread.sleep(100);
                     t = t + 100;
 
-                    if (t >= timeout) {
+                    // check if the timeout is reached and the message isn't get a response
+                    if (t >= timeout && isInTimeoutQueue(dt)) {
                         timeoutFinished = true;
+                        timeoutProceedQueue.remove(dt);
                         System.out.println("ninguém no sistema possui o arquivo " + f);
                     }
+
                 } catch (Exception e) {
 
                 }
             }
         }).start();
+    }
+
+    public static boolean isInTimeoutQueue(String dt) {
+        for (String q : timeoutProceedQueue) {
+            if (q.equals(dt)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static int getRandomPeerIndex() {
@@ -223,21 +245,12 @@ public class Peer {
                     Thread.sleep(30000);
                     File[] listFiles = new File(folderPath).listFiles();
 
-                    ArrayList<String> cloneNames = new ArrayList<String>();
-                    for (String item : this.names) {
-                        cloneNames.add(item);
-                    }
-
                     // peer file names
                     this.names = new ArrayList<String>();
                     for (File f : listFiles) {
                         if (f.isFile()) {
                             this.names.add(f.getName());
                         }
-                    }
-
-                    if (!this.names.toString().contentEquals(cloneNames.toString()) && !cloneNames.isEmpty()) {
-                        folderChanged = true;
                     }
 
                     String files = "";
@@ -258,6 +271,7 @@ public class Peer {
         private String folderPath;
         private ArrayList<String> filesProceeded = new ArrayList<>();
         private ArrayList<String> ipPortProceeded = new ArrayList<>();
+        private ArrayList<String> dateTimeProceeded = new ArrayList<>();
 
         public PeerHandler(DatagramSocket serverSocket, String folderPath) {
             this.serverSocket = serverSocket;
@@ -285,16 +299,19 @@ public class Peer {
 
                     String message = this.UDPRequest.getMessage();
                     String fileName = this.UDPRequest.getFileName();
-                    String ipOriginPortRequest = this.UDPRequest.getOriginIpPort();
+                    LocalDateTime dateTime = this.UDPRequest.getDateTime();
 
-                    if (folderChanged) {
-                        this.resetProceedList();
-                        folderChanged = false;
-                    }
-
+                    // compose a new forward message
                     Mensagem UDPResponse = new Mensagem();
+
                     // copy address list from request to response
                     UDPResponse.setAddressList(this.UDPRequest.getAddressList(), this.UDPRequest.getPortList());
+
+                    // keep same origin in response
+                    UDPResponse.setOrigin(this.UDPRequest.getOriginAddress(), this.UDPRequest.getOriginPort());
+
+                    // keep same origin message date time
+                    UDPResponse.setDateTime(dateTime);
 
                     if (message.equals("SEARCH")) { // SEARCH
                         Boolean fileFound = false;
@@ -304,10 +321,13 @@ public class Peer {
                         String peer1IpPort = getIpPort(Peer.peerAddress1, Peer.peerPort1);
                         String peer2IpPort = getIpPort(Peer.peerAddress2, Peer.peerPort2);
 
-                        boolean peer1IsProceeded = this.isProceeded(fileName, peer1IpPort);
-                        boolean peer2IsProceeded = this.isProceeded(fileName, peer2IpPort);
+                        boolean peer1IsProceeded = this.isProceeded(fileName, peer1IpPort, dateTime.toString());
+                        boolean peer2IsProceeded = this.isProceeded(fileName, peer2IpPort, dateTime.toString());
+                        boolean originPeerProceeded = this.isProceeded(fileName, this.UDPRequest.getOriginIpPort(),
+                                dateTime.toString());
 
-                        if (this.isProceeded(fileName, ipOriginPortRequest) && peer1IsProceeded && peer2IsProceeded) {
+                        // check if origin peer message was proceeded and next known peer too
+                        if (originPeerProceeded && peer1IsProceeded && peer2IsProceeded) {
                             System.out.println("requisição já processada para " + fileName);
                             throw new Exception();
                         }
@@ -316,7 +336,7 @@ public class Peer {
                             if (f.isFile() && fileName.equals(f.getName())) {
                                 // send message to origin peer
                                 InetAddress address = this.UDPRequest.getOriginAddress();
-                                int port = this.UDPRequest.getOriginIp();
+                                int port = this.UDPRequest.getOriginPort();
                                 ipPort = this.UDPRequest.getOriginIpPort();
 
                                 UDPResponse.setMessage("RESPONSE");
@@ -324,7 +344,6 @@ public class Peer {
                                 UDPResponse.addAddress(address, port);
 
                                 fileFound = true;
-                                this.resetProceedList();
 
                                 System.out.println("tenho " + fileName + " respondendo para " + ipPort);
                                 Peer.sendMessage(UDPResponse, serverSocket, address, port);
@@ -355,18 +374,23 @@ public class Peer {
 
                             UDPResponse.setMessage("SEARCH");
                             UDPResponse.setFileName(fileName);
+
+                            // keep origin message datetime
                             UDPResponse.addAddress(peerA, peerP);
                             ipPort = UDPResponse.getIpPort();
 
+                            // add to proceeded list (to avoid resend same message)
                             this.filesProceeded.add(fileName);
                             this.ipPortProceeded.add(ipPort);
+                            this.dateTimeProceeded.add(dateTime.toString());
 
                             System.out.println("não tenho " + fileName + " respondendo para " + ipPort);
                             Peer.sendMessage(UDPResponse, serverSocket, peerA, peerP);
                         }
                     } else if (message.equals("RESPONSE")) {
-                        System.out.println("peer com arquivo procurado: " + ipOriginPortRequest + " " + fileName);
-                        Peer.timeoutFinished = true;
+                        System.out
+                                .println("peer com arquivo procurado: " + this.UDPRequest.getIpPort() + " " + fileName);
+                        Peer.timeoutProceedQueue.remove(dateTime.toString());
                     }
                 } catch (Exception e) {
 
@@ -375,20 +399,16 @@ public class Peer {
 
         }
 
-        private boolean isProceeded(String f, String i) {
+        private boolean isProceeded(String f, String i, String d) {
             for (int j = 0; j < this.filesProceeded.size(); j++) {
                 String fName = this.filesProceeded.get(j);
                 String iPort = this.ipPortProceeded.get(j);
-                if (fName.equals(f) && iPort.equals(i)) {
+                String dTime = this.dateTimeProceeded.get(j);
+                if (fName.equals(f) && iPort.equals(i) && dTime.equals(d)) {
                     return true;
                 }
             }
             return false;
-        }
-
-        private void resetProceedList() {
-            this.filesProceeded.clear();
-            this.ipPortProceeded.clear();
         }
 
         private String getIpPort(InetAddress address, int port) {

@@ -4,6 +4,13 @@ Projeto de Programação - Gossip<br />
 Revisão 1: 07/09/2022. <br />
 Aluno: Felipe Oliveira Silva<br />
 
+## Rodar o código
+
+```
+cd src
+javac Peer.java && java Peer
+```
+
 <b>1. Definição do Sistema</b>
 Crie um sistema P2P não-estruturado que permita encontrar o peer que possui uma
 determinada informação a ser procurada, utilizando UDP como protocolo da camada de
