@@ -1,8 +1,12 @@
 # Sistemas Distribuídos
 
 Projeto de Programação - Gossip<br />
-Revisão 1: 07/09/2022. <br />
-Aluno: Felipe Oliveira Silva<br />
+Alunos: 
+Felipe Oliveira Silva<br />
+RA: 11201822479<br />
+<br />
+Felipe de Souza Tiozo<br />
+RA: 11201822483
 
 ## Rodar o código
 
